@@ -155,8 +155,7 @@ if main_drop:
         st.metric(
             label="Максимальный отвал",
             value=f"{main_drop['drop_rate']:.1f}%",
-            delta=f"{main_drop['drop_count']:,.0f} пользователей",
-            delta_color="inverse"
+            delta=f"-{main_drop['drop_count']:,.0f} пользователей"
         )
         
         st.markdown(f"**Этап:** {stage_labels.get(main_drop['from_stage'], main_drop['from_stage'])}")
