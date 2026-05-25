@@ -22,6 +22,65 @@ def safe_float(val):
     try: return float(val)
     except: return val
 
+# ================================
+# 🔍 АНАЛИЗ ОСНОВНОГО ОТВАЛА
+# ================================
+
+def find_main_drop_point(df):
+    """Находит этап с максимальным отвалом и главную причину"""
+    
+    # Порядок этапов воронки
+    stages_order = ['impression', 'click', 'form_start', 'form_complete', 
+                    'price_view', 'payment_start', 'paid']
+    
+    # Считаем количество пользователей на каждом этапе
+    stage_counts = df.groupby('funnel_stage')['user_id'].nunique()
+    
+    # Считаем конверсию между этапами и отвалы
+    drop_analysis = []
+    for i in range(len(stages_order) - 1):
+        curr_stage = stages_order[i]
+        next_stage = stages_order[i + 1]
+        
+        curr_count = stage_counts.get(curr_stage, 0)
+        next_count = stage_counts.get(next_stage, 0)
+        
+        if curr_count > 0:
+            drop_count = curr_count - next_count
+            drop_rate = (drop_count / curr_count) * 100
+            
+            # Находим топ-причину отвала на этом этапе
+            stage_drops = df[
+                (df['funnel_stage'] == curr_stage) & 
+                (df['drop_reason'].notna())
+            ]
+            
+            top_reason = '—'
+            reason_count = 0
+            if len(stage_drops) > 0:
+                reason_counts = stage_drops['drop_reason'].value_counts()
+                if len(reason_counts) > 0:
+                    top_reason = reason_counts.index[0]
+                    reason_count = reason_counts.iloc[0]
+            
+            drop_analysis.append({
+                'from_stage': curr_stage,
+                'to_stage': next_stage,
+                'drop_count': drop_count,
+                'drop_rate': drop_rate,
+                'top_reason': top_reason,
+                'reason_count': reason_count
+            })
+    
+    # Находим этап с максимальным отвалом
+    if drop_analysis:
+        main_drop = max(drop_analysis, key=lambda x: x['drop_rate'])
+        return main_drop, drop_analysis
+    return None, drop_analysis
+
+# Запускаем анализ
+main_drop, all_drops = find_main_drop_point(df)
+
 metrics = {row['metric']: safe_float(row['value']) for _, row in metrics_df.iterrows()}
 
 CONV = metrics['Overall conversion rate, %']
@@ -74,6 +133,61 @@ c1.metric("Конверсия", f"{CONV:.1f}%")
 c2.metric("Купившие", f"{CONV_COUNT:,}")
 c3.metric("Средний чек", f"{AVG_CHECK:,.0f} ₽")
 c4.metric("Сборы (GWP)", f"{GWP:,.0f} ₽")
+
+if main_drop:
+    st.subheader("Главная проблема воронки")
+    
+    # Красивая карточка с проблемой
+    col1, col2 = st.columns([3, 2])
+    
+    with col1:
+        # Этап отвала
+        stage_labels = {
+            'impression': 'Просмотр',
+            'click': 'Клик',
+            'form_start': 'Начало формы',
+            'form_complete': 'Завершение формы',
+            'price_view': 'Просмотр цены',
+            'payment_start': 'Начало оплаты',
+            'paid': 'Покупка'
+        }
+        
+        st.metric(
+            label="Максимальный отвал",
+            value=f"{main_drop['drop_rate']:.1f}%",
+            delta=f"{main_drop['drop_count']:,.0f} пользователей",
+            delta_color="inverse"
+        )
+        
+        st.markdown(f"**Этап:** {stage_labels.get(main_drop['from_stage'], main_drop['from_stage'])}")
+        st.markdown(f"**Переход:** → {stage_labels.get(main_drop['to_stage'], main_drop['to_stage'])}")
+    
+    with col2:
+        st.metric(
+            label="Главная причина",
+            value=main_drop['top_reason'],
+            help=f"Указали {main_drop['reason_count']} пользователей"
+        )
+        
+        # Краткая рекомендация
+        recommendations = {
+            'Не заинтересовал заголовок': 'Протестировать варианты заголовков и ценностное предложение',
+            'Ушёл по сравнению на banki.ru / sravni.ru': 'Подсветить преимущества Сбера: скорость, интеграция',
+            'Сложная форма': 'Упростить форму: автозаполнение, меньше полей',
+            'Передумал страховать': 'Настроить ретаргетинг с персональным оффером',
+            'Дорого': 'Показать цену «в месяц», добавить рассрочку',
+            'Нашёл дешевле у конкурента': 'Сравнительная таблица с конкурентами',
+            'Не понял, что входит': 'Добавить чеклист покрытия и тултипы',
+            'Долго грузилось': '⚡ Оптимизировать скорость загрузки страниц',
+            'Техническая ошибка': 'Срочно проверить логи и исправить баги',
+            'Проблема с картой': 'Добавить больше способов оплаты',
+            'Передумал в последний момент': 'Напоминание в СберБанк Онлайн через 1 час',
+            'Технический сбой': 'Мониторинг ошибок + fallback-сценарии',
+            '—': 'Настроить детальное логирование причин отвалов'
+        }
+        
+        rec_text = recommendations.get(main_drop['top_reason'], 'Провести юзабилити-тесты')
+        st.info(f"**Рекомендация:** {rec_text}")
 
 st.divider()
 
