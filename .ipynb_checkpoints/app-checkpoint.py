@@ -12,7 +12,7 @@ st.set_page_config(
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv('sber_mortgage_insurance_funnel.csv', parse_dates=['date'])
+    df = pd.read_csv('sber_mortgage_insurance_funnel_problems.csv', parse_dates=['date'])
     metrics_df = pd.read_csv('metrics_summary.csv')
     return df, metrics_df
 
@@ -131,6 +131,84 @@ c2.metric("Купившие", f"{CONV_COUNT:,}")
 c3.metric("Средний чек", f"{AVG_CHECK:,.0f} ₽")
 c4.metric("Сборы (GWP)", f"{GWP:,.0f} ₽")
 
+# if main_drop:
+#     st.subheader("Главная проблема воронки")
+    
+#     # Красивая карточка с проблемой
+#     col1, col2 = st.columns([3, 2])
+    
+#     with col1:
+#         # Этап отвала
+#         stage_labels = {
+#             'impression': 'Просмотр',
+#             'click': 'Клик',
+#             'form_start': 'Начало формы',
+#             'form_complete': 'Завершение формы',
+#             'price_view': 'Просмотр цены',
+#             'payment_start': 'Начало оплаты',
+#             'paid': 'Покупка'
+#         }
+        
+#         st.metric(
+#             label="Максимальный отвал",
+#             value=f"{main_drop['drop_rate']:.1f}%",
+#             delta=f"-{main_drop['drop_count']:,.0f} пользователей"
+#         )
+        
+#         st.markdown(f"**Этап:** {stage_labels.get(main_drop['from_stage'], main_drop['from_stage'])}")
+#         st.markdown(f"**Переход:** → {stage_labels.get(main_drop['to_stage'], main_drop['to_stage'])}")
+    
+#     with col2:
+#         # Кастомная метрика с тёмным фоном для длинного текста
+#         st.markdown(f"""
+#         <div style="
+#             background-color: #262730;
+#             border: 1px solid #3d3d4a;
+#             border-radius: 10px;
+#             padding: 16px;
+#             margin-bottom: 8px;
+#         ">
+#             <p style="
+#                 color: #9da0a6;
+#                 font-size: 14px;
+#                 margin: 0 0 4px 0;
+#                 font-family: 'Source Sans Pro', sans-serif;
+#             ">Главная причина</p>
+#             <p style="
+#                 color: #fafafa;
+#                 font-size: 22px;
+#                 font-weight: 600;
+#                 margin: 0;
+#                 font-family: 'Source Sans Pro', sans-serif;
+#                 word-wrap: break-word;
+#                 overflow-wrap: break-word;
+#                 line-height: 1.3;
+#             ">{main_drop['top_reason']}</p>
+#         </div>
+#         """, unsafe_allow_html=True)
+        
+#         st.caption(f"Указали {main_drop['reason_count']} пользователей")
+        
+#         # Краткая рекомендация
+#         recommendations = {
+#             'Не заинтересовал заголовок': 'Протестировать варианты заголовков и ценностное предложение',
+#             'Ушёл по сравнению на banki.ru / sravni.ru': 'Подсветить преимущества Сбера: скорость, интеграция',
+#             'Сложная форма': 'Упростить форму: автозаполнение, меньше полей',
+#             'Передумал страховать': 'Настроить ретаргетинг с персональным оффером',
+#             'Дорого': 'Показать цену «в месяц», добавить рассрочку',
+#             'Нашёл дешевле у конкурента': 'Сравнительная таблица с конкурентами',
+#             'Не понял, что входит': 'Добавить чеклист покрытия и тултипы',
+#             'Долго грузилось': '⚡ Оптимизировать скорость загрузки страниц',
+#             'Техническая ошибка': 'Срочно проверить логи и исправить баги',
+#             'Проблема с картой': 'Добавить больше способов оплаты',
+#             'Передумал в последний момент': 'Напоминание в СберБанк Онлайн через 1 час',
+#             'Технический сбой': 'Мониторинг ошибок + fallback-сценарии',
+#             '—': 'Настроить детальное логирование причин отвалов'
+#         }
+        
+#         rec_text = recommendations.get(main_drop['top_reason'], 'Провести юзабилити-тесты')
+#         st.info(f"**Рекомендация:** {rec_text}")
+
 if main_drop:
     st.subheader("Главная проблема воронки")
     
@@ -159,13 +237,21 @@ if main_drop:
         st.markdown(f"**Переход:** → {stage_labels.get(main_drop['to_stage'], main_drop['to_stage'])}")
     
     with col2:
-        st.metric(
-            label="Главная причина",
-            value=main_drop['top_reason'],
-            help=f"Указали {main_drop['reason_count']} пользователей"
+        st.markdown("###### Главная причина")
+        st.markdown(
+            f"<span style='font-size: clamp(1rem, 3.5vw, 1.5rem); "
+            f"font-weight: 600; "
+            f"display: block; "
+            f"word-wrap: break-word; "
+            f"overflow-wrap: break-word; "
+            f"line-height: 1.3;'>"
+            f"{main_drop['top_reason']}"
+            f"</span>",
+            unsafe_allow_html=True
         )
         
-        # Краткая рекомендация
+        st.caption(f"Указали {main_drop['reason_count']} пользователей")
+        
         recommendations = {
             'Не заинтересовал заголовок': 'Протестировать варианты заголовков и ценностное предложение',
             'Ушёл по сравнению на banki.ru / sravni.ru': 'Подсветить преимущества Сбера: скорость, интеграция',
@@ -174,7 +260,7 @@ if main_drop:
             'Дорого': 'Показать цену «в месяц», добавить рассрочку',
             'Нашёл дешевле у конкурента': 'Сравнительная таблица с конкурентами',
             'Не понял, что входит': 'Добавить чеклист покрытия и тултипы',
-            'Долго грузилось': '⚡ Оптимизировать скорость загрузки страниц',
+            'Долго грузилось': 'Оптимизировать скорость загрузки страниц',
             'Техническая ошибка': 'Срочно проверить логи и исправить баги',
             'Проблема с картой': 'Добавить больше способов оплаты',
             'Передумал в последний момент': 'Напоминание в СберБанк Онлайн через 1 час',
@@ -217,7 +303,7 @@ st.subheader("Детальная аналитика")
 # Вкладки для переключения между визуализациями
 tab1, tab2 = st.tabs(["Сезонность", "По регионам"])
 
-# === Вкладка 1: Сезонность конверсии (месяц × день недели) ===
+# Сезонность конверсии (месяц - день недели)
 with tab1:
     # Добавляем день недели для анализа
     df_plot = df.copy()
@@ -252,39 +338,6 @@ with tab1:
     st.plotly_chart(fig_seasonal, use_container_width=True)
     st.caption("Подсказка: тёмно-зелёные ячейки = пик конверсии (март-май, будни). Планируй рекламу в эти периоды.")
     
-
-# with tab2:
-
-#     region_stage = pd.crosstab(
-#         df['region'], 
-#         df['funnel_stage'], 
-#         values=df['user_id'], 
-#         aggfunc='count',
-#         normalize='index'  # проценты внутри региона
-#     ) * 100
-    
-#     stage_labels = {
-#         'impression': 'Просмотр',
-#         'click': 'Клик', 
-#         'form_start': 'Начал форму',
-#         'form_complete': 'Завершил форму',
-#         'price_view': 'Увидел цену',
-#         'payment_start': 'Начал оплату',
-#         'paid': 'Купил'
-#     }
-#     region_stage = region_stage.rename(columns=stage_labels)
-    
-#     fig_region = px.imshow(
-#         region_stage.values,
-#         x=region_stage.columns,
-#         y=region_stage.index,
-#         color_continuous_scale=px.colors.sequential.algae,
-#         title="Доля пользователей по этапам воронки (%)",
-#         aspect="auto",
-#         labels=dict(x="Этап", y="Регион", color="% пользователей")
-#     )
-#     fig_region.update_layout(height=350, margin=dict(t=40, b=40, l=20, r=20), xaxis_tickangle=-45)
-#     st.plotly_chart(fig_region, use_container_width=True)
 
 with tab2:
     region_conv = df.groupby('region').apply(
@@ -328,7 +381,7 @@ with tab2:
         'Средний чек, ₽': '{:,.0f} ₽'
     }).background_gradient(subset=['Конверсия, %'], cmap='YlGn', axis=0),
     use_container_width=True,
-    hide_index=True  # явно скрываем индекс
+    hide_index=True
     )
 
     best_region = region_conv.loc[region_conv['conversion_rate'].idxmax()]
