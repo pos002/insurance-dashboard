@@ -336,7 +336,7 @@ with tab1:
     )
     fig_seasonal.update_layout(height=400, margin=dict(t=40, b=20, l=20, r=20))
     st.plotly_chart(fig_seasonal, use_container_width=True)
-    st.caption("Подсказка: тёмно-зелёные ячейки = пик конверсии (март-май, будни). Планируй рекламу в эти периоды.")
+    st.caption("Подсказка: тёмно-зелёные ячейки = пик конверсии. Планируй рекламу в эти периоды.")
     
 
 with tab2:
