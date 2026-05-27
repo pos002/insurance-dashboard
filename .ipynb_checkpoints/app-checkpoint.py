@@ -36,67 +36,40 @@ STAGES_ORDER = list(STAGE_RU.keys())
 st.title("Ипотечное страхование недвижимости в Сбере")
 st.caption("Аналитика воронки продаж | 4 ключевые метрики | Система принятия решений")
 
-# Выпадающий фильтр региона
 selected_region = st.selectbox(
     "Фильтр по региону:",
     options=["Все регионы"] + sorted(df['region'].unique().tolist()),
-    index=0,  # по умолчанию "Все регионы"
+    index=0,
     label_visibility="collapsed"
 )
 
-# Применяем фильтр к данным
-if selected_region == "Все регионы":
-    df_filtered = df.copy()
-else:
-    df_filtered = df[df['region'] == selected_region].copy()
+selected_device = st.selectbox(
+    "Фильтр по устройству:",
+    options=["Все устройства", "Mobile", "Desktop"],
+    index=0,
+    label_visibility="collapsed"
+)
 
-# Пересчитываем метрики динамически
+# Применение фильтров
+df_filtered = df.copy()
+if selected_region != "Все регионы":
+    df_filtered = df_filtered[df_filtered['region'] == selected_region]
+if selected_device != "Все устройства":
+    df_filtered = df_filtered[df_filtered['device'] == selected_device.lower()]
+
+# Метрики
 CONV = df_filtered['is_converted'].mean() * 100 if len(df_filtered) > 0 else 0
 CONV_COUNT = int(df_filtered['is_converted'].sum())
 AVG_CHECK = df_filtered[df_filtered['is_converted'] == 1]['premium_rub'].mean() if df_filtered['is_converted'].sum() > 0 else 0
 GWP = df_filtered[df_filtered['is_converted'] == 1]['premium_rub'].sum() if df_filtered['is_converted'].sum() > 0 else 0
 
-# Отображение метрик
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Конверсия", f"{CONV:.1f}%")
 c2.metric("Купившие", f"{CONV_COUNT:,}")
 c3.metric("Средний чек", f"{AVG_CHECK:,.0f} ₽")
 c4.metric("Сборы (GWP)", f"{GWP:,.0f} ₽")
 
-# def get_recommendations(conv, conv_count, avg_check, gwp, df_filt):
-#     recs = []
-#     if conv < 5.0:
-#         recs.append(('HIGH', f'Конверсия: {conv:.1f}%', 'Критически низкая конверсия воронки', 
-#                      'Запустить срочный A/B-тест: упрощённая форма + автозаполнение', '+3–5 п.п. к конверсии'))
-#     elif conv < 7.0:
-#         recs.append(('MEDIUM', f'Конверсия: {conv:.1f}%', 'Ниже целевого уровня', 
-#                      'Проанализировать точки оттока + провести юзабилити-тесты', '+1–3 п.п.'))
-        
-#     expected_conv_count = len(df_filt) * 0.085
-#     if expected_conv_count > 0 and conv_count < expected_conv_count * 0.8:
-#         recs.append(('HIGH', f'Купившие: {conv_count:,}', 
-#                      f'Падение на {100 - conv_count/expected_conv_count*100:.0f}% к ожидаемому', 
-#                      'Проверить сезонность + запустить ретаргетинг в "проседающих" регионах', '+15–25% к покупкам'))
-                     
-#     if avg_check < 17000 or avg_check > 23000:
-#         dev = (avg_check - 20000) / 20000 * 100 if avg_check > 0 else 0
-#         recs.append(('MEDIUM', f'Средний чек: {avg_check:,.0f} ₽', 
-#                      f'Отклонение на {dev:+.1f}% от нормы', 
-#                      'Проверить структуру полисов и долю онлайн-скидок', 'Стабилизация ±10%'))
-                     
-#     expected_gwp = len(df_filt) * 0.085 * 20000
-#     if expected_gwp > 0 and gwp < expected_gwp * 0.85:
-#         recs.append(('HIGH', f'Сборы (GWP): {gwp:,.0f} ₽', 
-#                      f'Ниже плана на {100 - gwp/expected_gwp*100:.0f}%', 
-#                      'Комплекс мер: ↑конверсия + ↑чек + ↑трафик', '+10–20% к сборам'))
-                     
-#     if not recs:
-#         recs.append(('OK', 'Все метрики', 'в норме', 
-#                      'Продолжать мониторинг и тестировать гипотезы роста', 'Стабильный рост'))
-#     return recs
-
-# recs = get_recommendations(CONV, CONV_COUNT, AVG_CHECK, GWP, df_filtered)
-
+# Проблема воронки
 stage_counts = df_filtered.groupby('funnel_stage')['user_id'].nunique()
 drop_analysis = []
 for i in range(len(STAGES_ORDER) - 1):
@@ -134,9 +107,10 @@ if drop_analysis and len(df_filtered) > 0:
 
 st.divider()
 
+# Графики
 col1, col2 = st.columns(2)
 
-# Воронка с переключателем
+# Переключатель типа воронки
 funnel_type = st.radio(
     "Тип воронки:",
     options=["Накопительная", "Точечная"],
@@ -145,61 +119,116 @@ funnel_type = st.radio(
 )
 st.caption("**Накопительная**: сколько дошло до этапа и дальше. **Точечная**: где именно пользователи отвалились.")
 
-point_counts = df_filtered.groupby('funnel_stage')['user_id'].nunique()
+# Построение данных воронки
+def build_funnel_data(point_counts, model_type):
+    if model_type == "Накопительная":
+        cumulative_counts = {}
+        for i, stage in enumerate(STAGES_ORDER):
+            stages_included = STAGES_ORDER[i:]
+            cumulative_counts[stage] = sum(point_counts.get(s, 0) for s in stages_included)
+        return [cumulative_counts[s] for s in STAGES_ORDER]
+    else:
+        return [point_counts.get(s, 0) for s in STAGES_ORDER]
 
-if funnel_type == "Накопительная":
-    cumulative_counts = {}
-    for i, stage in enumerate(STAGES_ORDER):
-        stages_included = STAGES_ORDER[i:]
-        cumulative_counts[stage] = sum(point_counts.get(s, 0) for s in stages_included)
-    df_funnel = pd.DataFrame({
+if selected_device == "Все устройства" and len(df_filtered) > 0:
+    # Сравнение: Mobile и Desktop
+    # Подсчёт для каждого устройства
+    point_counts_mobile = df_filtered[df_filtered['device'] == 'mobile'].groupby('funnel_stage')['user_id'].nunique()
+    point_counts_desktop = df_filtered[df_filtered['device'] == 'desktop'].groupby('funnel_stage')['user_id'].nunique()
+    
+    # Сбор данных
+    df_funnel_compare = pd.DataFrame({
         'Этап': [STAGE_RU[s] for s in STAGES_ORDER],
-        'Количество': [cumulative_counts[s] for s in STAGES_ORDER]
+        'Mobile': build_funnel_data(point_counts_mobile, funnel_type),
+        'Desktop': build_funnel_data(point_counts_desktop, funnel_type)
     })
-    title = "Воронка продаж (накопительная)"
+    
+    # Преобразование для Plotly
+    df_funnel_melted = df_funnel_compare.melt(
+        id_vars='Этап', value_vars=['Mobile', 'Desktop'],
+        var_name='Устройство', value_name='Количество'
+    )
+    
+    # График
+    fig_funnel = px.funnel(
+        df_funnel_melted,
+        x='Количество', y='Этап', color='Устройство',
+        color_discrete_map={'Mobile': '#2ca02c', 'Desktop': '#1f77b4'},
+        title=f"Воронка: сравнение устройств ({funnel_type.lower()})",
+        category_orders={'Этап': [STAGE_RU[s] for s in STAGES_ORDER]}
+    )
+    fig_funnel.update_layout(showlegend=True, height=380)
+    col1.plotly_chart(fig_funnel, use_container_width=True)
+    
 else:
+    # Одна воронка для выбранного устройства
+    point_counts = df_filtered.groupby('funnel_stage')['user_id'].nunique()
+    values = build_funnel_data(point_counts, funnel_type)
+    
     df_funnel = pd.DataFrame({
         'Этап': [STAGE_RU[s] for s in STAGES_ORDER],
-        'Количество': [point_counts.get(s, 0) for s in STAGES_ORDER]
+        'Количество': values
     })
-    title = "Воронка продаж (точечная)"
-
-fig_funnel = px.funnel(
-    df_funnel, x='Количество', y='Этап', color='Этап',
-    color_discrete_sequence=px.colors.sequential.YlGnBu, title=title,
-    category_orders={'Этап': [STAGE_RU[s] for s in STAGES_ORDER]}
-)
-fig_funnel.update_layout(showlegend=False, height=380)
-col1.plotly_chart(fig_funnel, use_container_width=True)
-
-# Конверсия по устройствам
-if len(df_filtered) > 0:
+    
+    suffix = "(накопительная)" if funnel_type == "Накопительная" else "(точечная)"
+    device_suffix = f": {selected_device}" if selected_device != "Все устройства" else ""
+    title = f"Воронка продаж{device_suffix} {suffix}"
+    
+    fig_funnel = px.funnel(
+        df_funnel, x='Количество', y='Этап', color='Этап',
+        color_discrete_sequence=px.colors.sequential.YlGnBu, title=title,
+        category_orders={'Этап': [STAGE_RU[s] for s in STAGES_ORDER]}
+    )
+    fig_funnel.update_layout(showlegend=False, height=380)
+    col1.plotly_chart(fig_funnel, use_container_width=True)
+    
+# Метрики по устройствам
+if selected_device == "Все устройства" and len(df_filtered) > 0:
+    # Сравнение конверсии
     device_conv = df_filtered.groupby('device').apply(
         lambda x: (x['funnel_stage'] == 'paid').sum() / len(x) * 100 if len(x) > 0 else 0
     ).reset_index(name='conversion_rate')
-
+    
+    device_conv['Устройство'] = device_conv['device'].map({'mobile': 'Mobile', 'desktop': 'Desktop'})
+    
     fig_device = px.pie(
-        device_conv, 
-        names='device', 
-        values='conversion_rate',
-        title="Конверсия по устройствам (%)", 
-        hole=0.4,
-        color_discrete_sequence=px.colors.sequential.YlGn
+        device_conv, names='Устройство', values='conversion_rate',
+        title="Конверсия по устройствам (%)", hole=0.4,
+        color='Устройство', color_discrete_map={'Mobile': '#2ca02c', 'Desktop': '#1f77b4'}
+    )
+    fig_device.update_traces(textinfo='percent+label')
+    fig_device.update_layout(height=380)
+    col2.plotly_chart(fig_device, use_container_width=True)
+    
+    # Инсайт о разрыве
+    if len(device_conv) == 2:
+        mobile_c = device_conv[device_conv['device'] == 'mobile']['conversion_rate'].values[0]
+        desktop_c = device_conv[device_conv['device'] == 'desktop']['conversion_rate'].values[0]
+        gap = abs(desktop_c - mobile_c)
+        if gap > 1.0:
+            better = "Desktop" if desktop_c > mobile_c else "Mobile"
+            st.caption(f"Разрыв: {better} превосходит на {gap:.1f} п.п.")
+            
+elif len(df_filtered) > 0:
+    # Конверсия для одного устройства
+    fig_device = px.pie(
+        values=[CONV, max(0, 100-CONV)],
+        names=['Конверсия', 'Не конверсия'],
+        title=f"Конверсия: {selected_device}",
+        hole=0.4, color_discrete_sequence=['#2ca02c', '#d3d3d3']
     )
     fig_device.update_traces(textinfo='percent+label')
     fig_device.update_layout(height=380)
     col2.plotly_chart(fig_device, use_container_width=True)
 else:
-    col2.info("Нет данных для выбранного региона")
+    col2.info("Нет данных для выбранных фильтров")
 
-
+# Детальная аналитика
 st.subheader("Детальная аналитика")
-# Поменяли порядок вкладок: сначала регионы, потом сезонность
 tab1, tab2 = st.tabs(["По регионам", "Сезонность"])
 
 with tab1:
     if selected_region == "Все регионы" and len(df_filtered) > 0:
-        # Показываем сравнение по регионам только если выбрано "Все регионы"
         region_conv = df_filtered.groupby('region').apply(
             lambda x: (x['funnel_stage'] == 'paid').sum() / len(x) * 100 if len(x) > 0 else 0
         ).sort_values(ascending=True).reset_index(name='conversion_rate')
@@ -212,7 +241,6 @@ with tab1:
         fig_region.update_layout(showlegend=False, margin=dict(t=40, b=20, l=20, r=20), xaxis_title='Конверсия, %', yaxis_title='')
         st.plotly_chart(fig_region, use_container_width=True)
         
-        # Таблица по регионам
         region_stats = df_filtered.groupby('region').agg(
             users=('user_id', 'count'),
             converted=('is_converted', 'sum'),
@@ -231,9 +259,8 @@ with tab1:
         
         best = region_conv.loc[region_conv['conversion_rate'].idxmax()]
         worst = region_conv.loc[region_conv['conversion_rate'].idxmin()]
-        st.caption(f"Лучшая конверсия: **{best['region']}** ({best['conversion_rate']:.1f}%). Худшая: **{worst['region']}** ({worst['conversion_rate']:.1f}%).")
+        st.caption(f"Лучшая: **{best['region']}** ({best['conversion_rate']:.1f}%). Худшая: **{worst['region']}** ({worst['conversion_rate']:.1f}%).")
     else:
-        # Если выбран конкретный регион — показываем его детали
         if len(df_filtered) > 0:
             st.markdown(f"### Детали по региону: **{selected_region}**")
             c1, c2, c3 = st.columns(3)
@@ -241,38 +268,28 @@ with tab1:
             c2.metric("Конверсия", f"{CONV:.1f}%")
             c3.metric("Средний чек", f"{AVG_CHECK:,.0f} ₽")
             
-            # Конверсия по устройствам в этом регионе
             device_stats = df_filtered.groupby('device').agg(
                 users=('user_id', 'count'),
                 converted=('is_converted', 'sum')
             ).reset_index()
-            
             device_stats['conv_rate'] = (device_stats['converted'] / device_stats['users'] * 100).round(1)
-            
-            # Переводим названия устройств на русский
-            device_labels = {
-                'mobile': 'Mobile',
-                'desktop': 'Desktop'
-            }
-            device_stats['Устройство'] = device_stats['device'].map(device_labels)
+            device_stats['Устройство'] = device_stats['device'].map({'mobile': 'Mobile', 'desktop': 'Desktop'})
             
             st.dataframe(
                 device_stats[['Устройство', 'users', 'converted', 'conv_rate']].rename(
                     columns={'users': 'Пользователи', 'converted': 'Купили', 'conv_rate': 'Конверсия, %'}
                 ).style.format({'Конверсия, %': '{:.1f}%'}),
-                hide_index=True,
-                use_container_width=True
+                hide_index=True, use_container_width=True
             )
             
-            # Добавляем инсайт
             if len(device_stats) == 2:
-                mobile_conv = device_stats[device_stats['device'] == 'mobile']['conv_rate'].values[0]
-                desktop_conv = device_stats[device_stats['device'] == 'desktop']['conv_rate'].values[0]
-                gap = desktop_conv - mobile_conv
+                mobile_c = device_stats[device_stats['device'] == 'mobile']['conv_rate'].values[0]
+                desktop_c = device_stats[device_stats['device'] == 'desktop']['conv_rate'].values[0]
+                gap = desktop_c - mobile_c
                 if gap > 1.0:
-                    st.warning(f"**Разрыв в конверсии**: desktop превосходит mobile на {gap:.1f} п.п. Рекомендуется оптимизировать мобильную версию.")
+                    st.warning(f"**Разрыв**: desktop превосходит mobile на {gap:.1f} п.п. Рекомендуется оптимизировать мобильную версию.")
         else:
-            st.info("Нет данных для выбранного региона")
+            st.info("Нет данных для выбранных фильтров")
 
 with tab2:
     if len(df_filtered) > 0:
@@ -295,17 +312,11 @@ with tab2:
             )
             fig_seasonal.update_layout(height=400, margin=dict(t=40, b=20, l=20, r=20))
             st.plotly_chart(fig_seasonal, use_container_width=True)
-            st.caption("Подсказка: тёмно-зелёные ячейки = пик конверсии. Планируйте рекламу в эти периоды.")
+            st.caption("Тёмно-зелёные ячейки = пик конверсии. Планируйте рекламу в эти периоды.")
         else:
-            st.info("Недостаточно данных для построения тепловой карты")
+            st.info("Недостаточно данных для тепловой карты")
     else:
-        st.info("Нет данных для выбранного региона")
-# st.subheader("Рекомендации к действию")
-# for priority, metric_val, problem, action, expected in recs:
-#     with st.expander(f"{priority} | {metric_val}"):
-#         st.markdown(f"**Проблема:** {problem}")
-#         st.markdown(f"**Действие:** {action}")
-#         st.markdown(f"*Ожидаемый эффект: {expected}*")
+        st.info("Нет данных для выбранных фильтров")
 
 st.divider()
 st.caption("Кейс для отбора на стажировку в Сбер | Паршева Ольга")
